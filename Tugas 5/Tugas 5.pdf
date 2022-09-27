@@ -1,0 +1,48 @@
+a = c(1:10)
+i = 4
+
+if(a[i]%%2==0){
+  print("Angka Genap")
+}
+else{
+  print("Angka Ganjil")
+}
+
+b = 3
+ifelse(b%%2==0, print("Genap"), print('Ganjil'))
+
+rata=function(x){
+  s=sum(x)
+  n=length(x)
+  s/n
+}
+
+rata(1:10)
+
+ganjilGenap<-function(x){
+  ifelse(x%%2 == 0, "Genap", "Ganjil")
+}
+
+library(dslabs)
+data(murders)
+murder_rate = murder$total/muders$population*10000
+murder_rate
+raintext=c()
+for(i in 1:10){
+  if(murder_rate[i]<3){
+    rateintext[i]="kecil"
+  }else{
+    rateintext[i]="besar"
+  }
+}
+ifelse(murder_rate<3, "kecil", "besar")
+
+compute_s_n=function(n){
+  x=i:n
+  sum(x)
+}
+
+n=25
+s_n=vector(length=n)
+for(i in:n)
+  
