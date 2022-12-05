@@ -1,0 +1,274 @@
+---
+title: "Project Akhir Prak DS"
+author: "Fatin Luthfi Salman 123200071 || Shakira Luthfiani A 123200165"
+date: "11/20/2022"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**global**
+```{r global}
+# Daftar library Yang digunakan
+library(dplyr)#untuk memanipulasi data
+library(shiny)#untuk membuat web sederhana
+library(shinyWidgets)
+library(tidyverse)#untuk mengolah data
+library(vroom)#untuk import data dari file
+library(here)#untuk menemukan file
+library(tidytext)#untuk text mining
+library(ggplot2)#untuk visualisasi data dalam bentuk grafik
+library(plotly)#untuk visualisasi grafik pada web
+library(tm)#text mining
+library(memoise)#session
+library(wordcloud)
+library(wordcloud2)
+library(reshape2)#untuk membentuk data
+
+# Proses Mengambil data dari file
+wclothing = vroom(here("womensclothing.csv"))
+option_classname = unique(wclothing$`Class Name`)
+
+# Proses Menghitung Jumlah ulasan
+hitung_ulasan = function()
+{
+  wclothing %>%
+    nrow()
+}
+
+# Proses Menghitung Sentimen
+hitung_sentimen = function(x)
+{
+  wclothing %>%
+    unnest_tokens(word, `Review Text`) %>%
+    anti_join(stop_words) %>%
+    inner_join(get_sentiments("bing")) %>%
+    count(sentiment) %>%
+    filter(sentiment==x)
+}
+
+# Proses Klasifikasi Kalimat negatif atau positif untuk ditampilkan pada tabel
+table_wclothing = function()
+{
+  wclothing %>%
+    mutate(`Positive Feedback Count` = case_when(
+      `Rating` <= 3 ~ "Negatif",
+      TRUE ~ "Positif"
+    )) %>%
+    select(Age,Title,`Review Text`,`Positive Feedback Count`,`Class Name`) %>%
+    head(50)
+}
+```
+
+**`ui`**
+```{r ui}
+ui = fluidPage(
+  setBackgroundColor("lightgray"),
+  title = "Analisis Sentimen terhadap Pakaian Wanita di E-Commerce",
+  headerPanel("Analisis Sentimen terhadap Pakaian Wanita di E-Commerce"),
+  
+  fluidRow(
+    column(
+      4,
+      h3("Kata Positif"),
+      h4(strong(textOutput(outputId = "jumlah_positif"))),
+      style = "background-color: white ; background-size: cover;"
+    ),
+    column(
+      4,
+      h3("Kata Negatif"),
+      h4(strong(textOutput(outputId = "jumlah_negatif"))),
+      style = "background-color: white ; background-size: cover;"
+    ),
+    column(
+      4,
+      h3("Jumlah Ulasan"),
+      h4(strong(textOutput(outputId = "jumlah_ulasan"))),
+      style = "background-color: white ; background-size: cover;"
+    ),
+  ),
+  
+  sidebarLayout(
+    sidebarPanel(
+      style = "background-color: lightgray ; background-size: cover;",
+      selectInput(
+        inputId = "Class Name",
+        label = "Varian Pakaian Wanita",
+        choices = option_classname,
+        multiple = TRUE,
+        selected = option_classname[[1]]
+      ),
+      column(
+        8,
+        h3("Hasil Analisis"),
+        h4(strong(textOutput(outputId = "d_analisis"))),
+        style = "background-color: lightgray; background-size: cover;"
+      )
+    ),
+    
+    mainPanel(
+      style = "background-color: white ; background-size: cover;",
+      plotlyOutput(outputId = "plot_freq_kata", height = "700px"),
+      br(),
+      fluidRow(
+        column(
+          4,
+          h3("Kata Positif"),
+          h4(strong(textOutput(outputId = "jumlahpositif"))),
+          style="background-color: lightgray ; background-size: cover;"
+        ),
+        column(
+          4,
+          h3("Kata negatif"),
+          h4(strong(textOutput(outputId = "jumlahnegatif"))),
+          style="background-color: lightgray ; background-size: cover;"
+        ),
+        column(
+          4,
+          h3("jumlah ulasan"),
+          h4(strong(textOutput(outputId = "jumlahulasan"))),
+          style="background-color: lightgray ; background-size: cover;"
+        )
+      ),
+      plotlyOutput(outputId = "plot_kata_digunakan", height = "700px"),
+      h3("Word Clouds", align = "center"),
+      plotOutput(outputId = "plot_cloud_kata", height = "1200px"),
+      h3("Tabel Ulasan"),
+      tableOutput(outputId = "plot_ulasan")
+    )
+  )
+)
+```
+
+
+**`server`**
+```{r server}
+server = function(input, output, session)
+{
+  plot_freq_kata = reactive({
+    wclothing %>%
+      group_by(`Class Name`) %>%
+      unnest_tokens(word, `Review Text`) %>%
+      group_by(`Class Name`) %>%
+      anti_join(stop_words) %>%
+      count(word, sort = T) %>%
+      na.omit() %>%
+      filter(n>=1000) %>%
+      ggplot(aes(x=reorder(word,n), y=n, fill=`Class Name`))+
+               geom_bar(stat = "identity")+
+               coord_flip()+
+               labs(
+                 x="Kata",
+                 y="Frekuensi",
+                 title = "Grafik Frekuensi Kata"
+               )+
+               theme_linedraw()
+  })
+  
+  output$plot_freq_kata = renderPlotly({
+    ggplotly(plot_freq_kata())
+  })
+  
+  plot_kata_digunakan = reactive({
+    wclothing %>%
+      filter(`Class Name` %in% input$`Class Name`) %>%
+      unnest_tokens(word, `Review Text`) %>% 
+      anti_join(stop_words) %>%
+      inner_join(get_sentiments("bing")) %>%
+      group_by(sentiment, `Class Name`) %>%
+      count(word) %>%
+      top_n(10) %>%
+      ggplot(aes(x=reorder(word,n), y=n, fill=`Class Name`))+
+      geom_col(show.legend = T)+
+      coord_flip()+
+      facet_wrap(~sentiment,scales = "free_y")+
+      labs(
+        x="Kata",
+        y="Frekuensi",
+        title = "Grafik Penggunaan Kata"
+      )+
+      theme_linedraw()
+  })
+  
+  output$plot_kata_digunakan = renderPlotly({
+    ggplotly(plot_kata_digunakan())
+  })
+  
+  output$plot_cloud_kata = renderPlot({
+    wclothing %>%
+      filter(`Class Name` %in% input$`Class Name`) %>%
+      unnest_tokens(word, `Review Text`) %>%
+      anti_join(stop_words) %>%
+      inner_join(get_sentiments("bing")) %>%
+      count(word, sentiment) %>%
+      acast(word~sentiment, value.var = "n", fill = 0) %>%
+      comparison.cloud(colors = c("#e82a60", "#5ae8a4"), max.words = 230, scale = c(4,1))
+  })
+  
+  hitung_sentimenx = function(p)
+{
+  wclothing %>%
+    filter(`Class Name` %in% input$`Class Name`)%>%
+    unnest_tokens(word, `Review Text`) %>%
+    anti_join(stop_words) %>%
+    inner_join(get_sentiments("bing")) %>%
+    count(sentiment) %>%
+    filter(sentiment==p)
+}
+  
+  hitung_ulasanx = function()
+{
+  wclothing %>%
+    filter(`Class Name` %in% input$`Class Name`) %>%
+    nrow()
+}  
+  
+  output$jumlah_positif = renderText({
+    hitung_sentimen("positive")$n
+  })
+  
+  output$jumlah_negatif = renderText({
+    hitung_sentimen("negative")$n
+  })
+  
+  output$jumlah_ulasan = renderText({
+    hitung_ulasan()
+  })
+  
+  output$jumlahpositif = renderText({
+    hitung_sentimenx("positive")$n
+  })
+  
+  output$jumlahnegatif = renderText({
+    hitung_sentimenx("negative")$n
+  })
+  
+  output$jumlahulasan = renderText({
+    hitung_ulasanx()
+  })
+  
+    hasilanalisis = function()
+{
+  if (hitung_sentimenx("positive")$n>hitung_sentimenx("negative")$n) {
+    sprintf("Varian %s Cenderung memiliki feedback Positif", input$`Class Name`)
+  }  
+  else{
+    sprintf("Varian %s Cenderung memiliki feedback Negatif", input$`Class Name`)
+  }
+}
+  
+  output$d_analisis = renderText({
+    hasilanalisis()
+  })
+  
+  output$plot_ulasan = renderTable({
+    table_wclothing()
+  })
+}
+```
+
+**`run-app`**
+```{r run-app}
+shinyApp(ui = ui, server = server)
+```
